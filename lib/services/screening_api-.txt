@@ -1,0 +1,104 @@
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'secure_storage.dart';
+
+class ScreeningApi {
+  static const String _baseUrl =
+      'https://blushucasa.com/app/screening/run.php';
+
+  /* ================= RUN SCREENING ================= */
+  static Future<Map<String, dynamic>> runScreening({
+    required String name,
+    required String type,
+    String? dob,
+    String? nationality,
+  }) async {
+    final token = await SecureStorage.getToken();
+
+    if (token == null) {
+      return {
+        'authRequired': true,
+      };
+    }
+	print('🔑 Token: $token');
+    final uri = Uri.parse('$_baseUrl/run.php');
+
+    try {
+      final response = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'name': name,
+          'type': type,
+          'dob': dob,
+          'nationality': nationality,
+        }),
+      );
+
+      final data = jsonDecode(response.body);
+
+      /* === FREE LIMIT REACHED === */
+      if (response.statusCode == 403 &&
+          data['limit_reached'] == true) {
+        return {
+          'success': false,
+          'limitReached': true,
+          'message': data['message'] ??
+              'Free screening limit reached',
+        };
+      }
+
+      /* === AUTH INVALID / EXPIRED === */
+      if (response.statusCode == 401) {
+        return {
+          'authRequired': true,
+        };
+      }
+
+      return data;
+
+    } catch (e) {
+      return {
+        'success': false,
+        'error': 'Unable to reach server. Please try again.',
+      };
+    }
+  }
+
+  /* ================= CONTACT COMPLIANCE ================= */
+  static Future<bool> contactCompliance({
+    required String name,
+    required String type,
+    String? dob,
+    String? nationality,
+  }) async {
+    final token = await SecureStorage.getToken();
+
+    if (token == null) return false;
+
+    final uri = Uri.parse('$_baseUrl/contact.php');
+
+    try {
+      final response = await http.post(
+        uri,
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: jsonEncode({
+          'name': name,
+          'type': type,
+          'dob': dob,
+          'nationality': nationality,
+        }),
+      );
+
+      return response.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+}
